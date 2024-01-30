@@ -1,36 +1,44 @@
 import streamlit as st
-import cv2
+import tensorflow as tf
+import tensorflow_hub as hub
 import numpy as np
+from PIL import Image
 
-# Load pre-trained face detection model
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+# Function to perform object detection on an image
+def detect_objects(image):
+    image_np = np.array(image)
+    converted_img = tf.image.convert_image_dtype(image_np, tf.float32)[tf.newaxis, ...]
 
-# Function to detect faces in the image
-def detect_faces(image):
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, 1.1, 4)
-    for (x, y, w, h) in faces:
-        cv2.rectangle(image, (x, y), (x+w, y+h), (255, 0, 0), 2)
-    return image
+    result = model(converted_img)
+
+    result = {key: value.numpy() for key, value in result.items()}
+    num_detections = int(result.pop('num_detections'))
+    result = {key: value[:num_detections] for key, value in result.items()}
+    result['num_detections'] = num_detections
+
+    return result
 
 # Streamlit app
 def main():
-    st.title("Image Detection App")
-    st.write("Upload an image and detect faces!")
+    st.title("Object Detection App")
+    st.write("Upload an image and detect objects!")
 
     uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
     if uploaded_file is not None:
         # Read the image file
-        file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-        image = cv2.imdecode(file_bytes, 1)
+        image = Image.open(uploaded_file)
 
-        # Perform face detection
-        detected_image = detect_faces(image)
+        # Perform object detection
+        detections = detect_objects(image)
 
-        # Display the original and detected images
-        st.image(image, channels="BGR", caption="Original Image", use_column_width=True)
-        st.image(detected_image, channels="BGR", caption="Detected Faces", use_column_width=True)
+        # Display the detected objects
+        st.write("Detected Objects:")
+        for i in range(detections['num_detections']):
+            st.write(f"- {detections['detection_classes'][i]}: {detections['detection_scores'][i]}")
+
+        # Display the image with bounding boxes around the detected objects
+        st.image(image, caption='Detected Objects', use_column_width=True, channels="RGB")
 
 if __name__ == "__main__":
     main()
